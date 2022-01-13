@@ -74,9 +74,9 @@ type ClusterInitializer interface {
 }
 
 // Load objects from given folder paths and applies them into the cluster.
-type ClusterLoadObjectsFromFolder []string
+type ClusterLoadObjectsFromFolders []string
 
-func (l ClusterLoadObjectsFromFolder) Init(
+func (l ClusterLoadObjectsFromFolders) Init(
 	ctx context.Context, cluster *Cluster) error {
 	return cluster.CreateAndWaitFromFolders(ctx, l)
 }
@@ -97,15 +97,15 @@ func (l ClusterLoadObjectsFromHttp) Init(
 }
 
 type ClusterHelmInstall struct {
-	RepoName, RepoURL, PackageName, Namespace string
-	SetVars                                   []string
+	RepoName, RepoURL, PackageName, Namespace, ReleaseName string
+	SetVars                                                []string
 }
 
 func (l ClusterHelmInstall) Init(
 	ctx context.Context, cluster *Cluster) error {
 	return cluster.HelmInstall(
 		ctx, cluster,
-		l.RepoName, l.RepoURL, l.PackageName, l.Namespace, l.SetVars)
+		l.RepoName, l.RepoURL, l.PackageName, l.ReleaseName, l.Namespace, l.SetVars)
 }
 
 // Environment represents a development environment.

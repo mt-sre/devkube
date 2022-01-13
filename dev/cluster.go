@@ -220,7 +220,7 @@ func (c *Cluster) CreateAndWaitForReadiness(
 
 func (c *Cluster) HelmInstall(
 	ctx context.Context, cluster *Cluster,
-	repoName, repoURL, packageName, namespace string,
+	repoName, repoURL, packageName, releaseName, namespace string,
 	setVars []string,
 ) error {
 	// Repo Add
@@ -241,7 +241,10 @@ func (c *Cluster) HelmInstall(
 
 	// Install
 	installFlags := []string{
-		"install", repoName + "/" + packageName, "-n", namespace,
+		"install", releaseName, repoName + "/" + packageName,
+	}
+	if len(namespace) > 0 {
+		installFlags = append(installFlags, "-n", namespace)
 	}
 	for _, s := range setVars {
 		installFlags = append(installFlags, "--set", s)
