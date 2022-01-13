@@ -35,40 +35,36 @@ func (c *EnvironmentConfig) Default() {
 		c.NewCluster = NewCluster
 	}
 	if c.ClusterOptions == nil {
-		c.ClusterOptions = append(c.ClusterOptions, ClusterWithLogger(c.Logger))
+		c.ClusterOptions = append(c.ClusterOptions, WithLogger(c.Logger))
 	}
 }
 
-type EnvironmentOption func(c *EnvironmentConfig)
-
-func EnvironmentWithClusterInitializers(init ...ClusterInitializer) EnvironmentOption {
-	return func(c *EnvironmentConfig) {
-		c.ClusterInitializers = append(c.ClusterInitializers, init...)
-	}
+type EnvironmentOption interface {
+	ApplyToEnvironmentConfig(c *EnvironmentConfig)
 }
 
-func EnvironmentWithContainerRuntime(containerRuntime string) EnvironmentOption {
-	return func(c *EnvironmentConfig) {
-		c.ContainerRuntime = containerRuntime
-	}
+type WithClusterInitializers []ClusterInitializer
+
+func (i WithClusterInitializers) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
+	c.ClusterInitializers = append(c.ClusterInitializers, i...)
 }
 
-func EnvironmentWithLogger(logger logr.Logger) EnvironmentOption {
-	return func(c *EnvironmentConfig) {
-		c.Logger = logger
-	}
+type WithContainerRuntime string
+
+func (cr WithContainerRuntime) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
+	c.ContainerRuntime = string(cr)
 }
 
-func EnvironmentWithNewClusterFunc(newClusterFn NewClusterFunc) EnvironmentOption {
-	return func(c *EnvironmentConfig) {
-		c.NewCluster = newClusterFn
-	}
+type WithNewClusterFunc NewClusterFunc
+
+func (f WithNewClusterFunc) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
+	c.NewCluster = NewClusterFunc(f)
 }
 
-func EnvironmentWithClusterOptions(opts ...ClusterOption) EnvironmentOption {
-	return func(c *EnvironmentConfig) {
-		c.ClusterOptions = opts
-	}
+type WithClusterOptions []ClusterOption
+
+func (opts WithClusterOptions) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
+	c.ClusterOptions = opts
 }
 
 type NewClusterFunc func(kubeconfigPath string, opts ...ClusterOption) (*Cluster, error)
@@ -129,7 +125,7 @@ func NewEnvironment(name, workDir string, opts ...EnvironmentOption) *Environmen
 		WorkDir: workDir,
 	}
 	for _, opt := range opts {
-		opt(&env.config)
+		opt.ApplyToEnvironmentConfig(&env.config)
 	}
 	env.config.Default()
 	return env

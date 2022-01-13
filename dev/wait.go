@@ -41,25 +41,8 @@ func (c *WaiterConfig) Default() {
 	}
 }
 
-type WaitOption func(c *WaiterConfig)
-
-// Applies the given timeout to the waiter.
-func WaitWithTimeout(timeout time.Duration) WaitOption {
-	return func(c *WaiterConfig) {
-		c.Timeout = timeout
-	}
-}
-
-func WaitWithLogger(logger logr.Logger) WaitOption {
-	return func(c *WaiterConfig) {
-		c.Logger = logger
-	}
-}
-
-func WaitWithInterval(interval time.Duration) WaitOption {
-	return func(c *WaiterConfig) {
-		c.Interval = interval
-	}
+type WaitOption interface {
+	ApplyToWaiterConfig(c *WaiterConfig)
 }
 
 // Waiter implements functions to block till kube objects are in a certain state.
@@ -79,7 +62,7 @@ func NewWaiter(
 	}
 
 	for _, opt := range defaultOpts {
-		opt(&w.c)
+		opt.ApplyToWaiterConfig(&w.c)
 	}
 	w.c.Default()
 	return w
@@ -145,7 +128,7 @@ func (w *Waiter) WaitForObject(
 ) error {
 	c := w.c
 	for _, opt := range opts {
-		opt(&c)
+		opt.ApplyToWaiterConfig(&c)
 	}
 
 	gvk, err := apiutil.GVKForObject(object, w.scheme)

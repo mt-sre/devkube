@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 
 	"github.com/go-logr/logr"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -46,34 +47,12 @@ func (c *ClusterConfig) Default() {
 		c.NewWaiter = NewWaiter
 	}
 	if c.WaitOptions == nil {
-		c.WaitOptions = append(c.WaitOptions, WaitWithLogger(c.Logger))
+		c.WaitOptions = append(c.WaitOptions, WithLogger(c.Logger))
 	}
 }
 
-type ClusterOption func(c *ClusterConfig)
-
-func ClusterWithLogger(logger logr.Logger) ClusterOption {
-	return func(c *ClusterConfig) {
-		c.Logger = logger
-	}
-}
-
-func ClusterWithSchemeBuilder(sb runtime.SchemeBuilder) ClusterOption {
-	return func(c *ClusterConfig) {
-		c.SchemeBuilder = sb
-	}
-}
-
-func ClusterWithNewWaiterFunc(fn ClusterNewWaiterFunc) ClusterOption {
-	return func(c *ClusterConfig) {
-		c.NewWaiter = fn
-	}
-}
-
-func ClusterWithWaitOptions(opts ...WaitOption) ClusterOption {
-	return func(c *ClusterConfig) {
-		c.WaitOptions = opts
-	}
+type ClusterOption interface {
+	ApplyToClusterConfig(c *ClusterConfig)
 }
 
 // Container object to hold kubernetes client interfaces and configuration.
@@ -104,7 +83,7 @@ func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 
 	// Apply Options
 	for _, opt := range opts {
-		opt(&c.config)
+		opt.ApplyToClusterConfig(&c.config)
 	}
 	// Apply schemes from Options
 	if c.config.SchemeBuilder != nil {
@@ -279,9 +258,9 @@ func (c *Cluster) HelmInstall(
 func (c *Cluster) execHelmCommand(
 	ctx context.Context, stdout, stderr io.Writer, args ...string,
 ) error {
-	helmCacheDir := c.WorkDir + "helm/cache"
-	helmConfigDir := c.WorkDir + "helm/config"
-	helmDataDir := c.WorkDir + "helm/data"
+	helmCacheDir := path.Join(c.WorkDir, "helm/cache")
+	helmConfigDir := path.Join(c.WorkDir + "helm/config")
+	helmDataDir := path.Join(c.WorkDir + "helm/data")
 
 	for _, dir := range []string{helmCacheDir, helmConfigDir, helmDataDir} {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
