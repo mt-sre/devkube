@@ -13,6 +13,32 @@ import (
 	"github.com/go-logr/logr"
 )
 
+type EnvironmentConfig struct {
+	// Cluster initializers prepare a cluster for use.
+	ClusterInitializers []ClusterInitializer
+	// Container runtime to use
+	ContainerRuntime string
+	Logger           logr.Logger
+	NewCluster       NewClusterFunc
+	ClusterOptions   []ClusterOption
+}
+
+// Apply default configuration.
+func (c *EnvironmentConfig) Default() {
+	if len(c.ContainerRuntime) == 0 {
+		c.ContainerRuntime = "podman"
+	}
+	if c.Logger.GetSink() == nil {
+		c.Logger = logr.Discard()
+	}
+	if c.NewCluster == nil {
+		c.NewCluster = NewCluster
+	}
+	if c.ClusterOptions == nil {
+		c.ClusterOptions = append(c.ClusterOptions, ClusterWithLogger(c.Logger))
+	}
+}
+
 type EnvironmentOption func(c *EnvironmentConfig)
 
 func EnvironmentWithClusterInitializers(init ...ClusterInitializer) EnvironmentOption {
@@ -42,36 +68,6 @@ func EnvironmentWithNewClusterFunc(newClusterFn NewClusterFunc) EnvironmentOptio
 func EnvironmentWithClusterOptions(opts ...ClusterOption) EnvironmentOption {
 	return func(c *EnvironmentConfig) {
 		c.ClusterOptions = opts
-	}
-}
-
-type EnvironmentConfig struct {
-	Name string
-	// Working directory of the environment.
-	// Temporary files/kubeconfig etc. will be stored here.
-	WorkDir string
-	// Cluster initializers prepare a cluster for use.
-	ClusterInitializers []ClusterInitializer
-	// Container runtime to use
-	ContainerRuntime string
-	Logger           logr.Logger
-	NewCluster       NewClusterFunc
-	ClusterOptions   []ClusterOption
-}
-
-// Apply default configuration.
-func (c *EnvironmentConfig) Default() {
-	if len(c.ContainerRuntime) == 0 {
-		c.ContainerRuntime = "podman"
-	}
-	if c.Logger.GetSink() == nil {
-		c.Logger = logr.Discard()
-	}
-	if c.NewCluster == nil {
-		c.NewCluster = NewCluster
-	}
-	if c.ClusterOptions == nil {
-		c.ClusterOptions = append(c.ClusterOptions, ClusterWithLogger(c.Logger))
 	}
 }
 
@@ -118,18 +114,23 @@ func (l ClusterHelmInstall) Init(
 
 // Environment represents a development environment.
 type Environment struct {
+	Name string
+	// Working directory of the environment.
+	// Temporary files/kubeconfig etc. will be stored here.
+	WorkDir string
 	Cluster *Cluster
 	config  EnvironmentConfig
 }
 
 // Creates a new development environment.
 func NewEnvironment(name, workDir string, opts ...EnvironmentOption) *Environment {
-	env := &Environment{}
+	env := &Environment{
+		Name:    name,
+		WorkDir: workDir,
+	}
 	for _, opt := range opts {
 		opt(&env.config)
 	}
-	env.config.Name = name
-	env.config.WorkDir = workDir
 	env.config.Default()
 	return env
 }
@@ -152,11 +153,11 @@ apiVersion: kind.x-k8s.io/v1alpha4
 `
 	}
 
-	if err := os.MkdirAll(env.config.WorkDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(env.WorkDir, os.ModePerm); err != nil {
 		return fmt.Errorf("creating workdir: %w", err)
 	}
 
-	kindConfigPath := env.config.WorkDir + "/kind.yaml"
+	kindConfigPath := env.WorkDir + "/kind.yaml"
 	if err := ioutil.WriteFile(
 		kindConfigPath, []byte(kindConfig), os.ModePerm); err != nil {
 		return fmt.Errorf("creating kind cluster config: %w", err)
@@ -169,14 +170,14 @@ apiVersion: kind.x-k8s.io/v1alpha4
 	}
 
 	// Only create cluster if it is not already there.
-	createCluster := !strings.Contains(checkOutput.String(), env.config.Name+"\n")
+	createCluster := !strings.Contains(checkOutput.String(), env.Name+"\n")
 
 	if createCluster {
 		// Create cluster
 		if err := env.execKindCommand(
 			ctx, os.Stdout, os.Stderr,
 			"create", "cluster",
-			"--kubeconfig="+env.Cluster.Kubeconfig, "--name="+env.config.Name,
+			"--kubeconfig="+env.Cluster.Kubeconfig, "--name="+env.Name,
 			"--config="+kindConfigPath,
 		); err != nil {
 			return fmt.Errorf("creating kind cluster: %w", err)
@@ -185,7 +186,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 
 	// Create _all_ the clients
 	cluster, err := NewCluster(
-		env.config.WorkDir+"/kubeconfig.yaml", env.config.ClusterOptions...)
+		env.WorkDir+"/kubeconfig.yaml", env.config.ClusterOptions...)
 	if err != nil {
 		return fmt.Errorf("creating k8s clients: %w", err)
 	}
@@ -208,7 +209,7 @@ func (env *Environment) Destroy(ctx context.Context) error {
 	if err := env.execKindCommand(
 		ctx, os.Stdout, os.Stderr,
 		"delete", "cluster",
-		"--kubeconfig="+env.Cluster.Kubeconfig, "--name="+env.config.Name,
+		"--kubeconfig="+env.Cluster.Kubeconfig, "--name="+env.Name,
 	); err != nil {
 		return fmt.Errorf("deleting kind cluster: %w", err)
 	}
@@ -221,7 +222,7 @@ func (env *Environment) LoadImageFromTar(
 	if err := env.execKindCommand(
 		ctx, os.Stdout, os.Stderr,
 		"load", "image-archive", filePath,
-		"--name="+env.config.Name,
+		"--name="+env.Name,
 	); err != nil {
 		return fmt.Errorf("loading image archive: %w", err)
 	}

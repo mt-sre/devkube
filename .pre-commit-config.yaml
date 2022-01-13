@@ -2,7 +2,7 @@ exclude: |
   (?x)(
     (^vendor/)|
     (.deepcopy.go$)|
-    (mage_output_file.go$)|
+    (mage_output_file.go$)
   )
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -30,8 +30,9 @@ repos:
   - id: goimports
     name: goimports
     entry: hack/ensure-and-run-goimports.sh
-    language: system
+    language: script
     types: [go]
+    require_serial: true # mage does not like multiple parallel compiles
 
   - id: golangci-lint
     name: golangci-lint
@@ -39,6 +40,7 @@ repos:
     language: script
     pass_filenames: false
     types: [go]
+    require_serial: true # mage does not like multiple parallel compiles
 
   - id: go-mod-tidy
     name: go-mod-tidy
@@ -47,3 +49,4 @@ repos:
     exclude: ".*"
     pass_filenames: false
     always_run: true
+    require_serial: true # mage does not like multiple parallel compiles

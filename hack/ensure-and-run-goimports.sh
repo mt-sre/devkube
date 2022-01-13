@@ -6,4 +6,5 @@ set -euo pipefail
 
 ./mage dependency:goimports
 export GOFLAGS=""
-exec .deps/bin/goimports -local github.com/mt-sre/devkube -w -l "$@"
+>&2 echo "running on $@"
+# exec .deps/bin/goimports -local github.com/mt-sre/devkube -w -l "$@"

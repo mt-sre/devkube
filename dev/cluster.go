@@ -21,17 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Container object to hold kubernetes client interfaces and configuration.
-type Cluster struct {
-	Scheme     *runtime.Scheme
-	RestConfig *rest.Config
-	CtrlClient client.Client
-	Waiter     *Waiter
-	WorkDir    string
-	// Path to the kubeconfig of the cluster
-	Kubeconfig string
-
-	config ClusterConfig
+var defaultSchemeBuilder runtime.SchemeBuilder = runtime.SchemeBuilder{
+	clientgoscheme.AddToScheme,
+	apiextensionsv1.AddToScheme,
 }
 
 type ClusterConfig struct {
@@ -84,9 +76,17 @@ func ClusterWithWaitOptions(opts ...WaitOption) ClusterOption {
 	}
 }
 
-var defaultSchemeBuilder runtime.SchemeBuilder = runtime.SchemeBuilder{
-	clientgoscheme.AddToScheme,
-	apiextensionsv1.AddToScheme,
+// Container object to hold kubernetes client interfaces and configuration.
+type Cluster struct {
+	Scheme     *runtime.Scheme
+	RestConfig *rest.Config
+	CtrlClient client.Client
+	Waiter     *Waiter
+	WorkDir    string
+	// Path to the kubeconfig of the cluster
+	Kubeconfig string
+
+	config ClusterConfig
 }
 
 // Creates a new Cluster object to interact with a Kubernetes cluster.

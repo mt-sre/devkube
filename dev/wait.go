@@ -22,6 +22,46 @@ const (
 	WaiterDefaultInterval = time.Second
 )
 
+type WaiterConfig struct {
+	Logger   logr.Logger
+	Timeout  time.Duration
+	Interval time.Duration
+}
+
+// Sets defaults on the waiter config.
+func (c *WaiterConfig) Default() {
+	if c.Logger.GetSink() == nil {
+		c.Logger = logr.Discard()
+	}
+	if c.Timeout == 0 {
+		c.Timeout = WaiterDefaultTimeout
+	}
+	if c.Interval == 0 {
+		c.Interval = WaiterDefaultInterval
+	}
+}
+
+type WaitOption func(c *WaiterConfig)
+
+// Applies the given timeout to the waiter.
+func WaitWithTimeout(timeout time.Duration) WaitOption {
+	return func(c *WaiterConfig) {
+		c.Timeout = timeout
+	}
+}
+
+func WaitWithLogger(logger logr.Logger) WaitOption {
+	return func(c *WaiterConfig) {
+		c.Logger = logger
+	}
+}
+
+func WaitWithInterval(interval time.Duration) WaitOption {
+	return func(c *WaiterConfig) {
+		c.Interval = interval
+	}
+}
+
 // Waiter implements functions to block till kube objects are in a certain state.
 type Waiter struct {
 	client client.Client
@@ -128,40 +168,6 @@ func (w *Waiter) WaitForObject(
 
 			return checkFn(object)
 		})
-}
-
-type WaiterConfig struct {
-	Logger   logr.Logger
-	Timeout  time.Duration
-	Interval time.Duration
-}
-
-// Sets defaults on the waiter config.
-func (c *WaiterConfig) Default() {
-	if c.Logger.GetSink() == nil {
-		c.Logger = logr.Discard()
-	}
-	if c.Timeout == 0 {
-		c.Timeout = WaiterDefaultTimeout
-	}
-	if c.Interval == 0 {
-		c.Interval = WaiterDefaultInterval
-	}
-}
-
-type WaitOption func(c *WaiterConfig)
-
-// Applies the given timeout to the waiter.
-func WaitWithTimeout(timeout time.Duration) WaitOption {
-	return func(c *WaiterConfig) {
-		c.Timeout = timeout
-	}
-}
-
-func WaitWithLogger(logger logr.Logger) WaitOption {
-	return func(c *WaiterConfig) {
-		c.Logger = logger
-	}
 }
 
 // Check if a object condition is in a certain state.
