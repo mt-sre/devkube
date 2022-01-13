@@ -45,7 +45,7 @@ repos:
   - id: go-mod-tidy
     name: go-mod-tidy
     entry: ./mage tidy
-    language: system
+    language: script
     exclude: ".*"
     pass_filenames: false
     always_run: true
