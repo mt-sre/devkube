@@ -3,6 +3,7 @@ package magedeps
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/magefile/mage/mg"
@@ -14,7 +15,7 @@ type DependencyDirectory string
 
 // Returns the /bin directory containing the dependency binaries.
 func (d DependencyDirectory) Bin() string {
-	return string(d) + "/bin"
+	return path.Join(string(d), "bin")
 }
 
 // Go install a dependency into the dependency directory
@@ -33,7 +34,7 @@ func (d DependencyDirectory) GoInstall(tool, packageURl, version string) error {
 
 	url := packageURl + "@v" + version
 	if err := sh.RunWithV(map[string]string{
-		"GOBIN": string(d) + "/bin",
+		"GOBIN": d.Bin(),
 	}, mg.GoCmd(),
 		"install", url,
 	); err != nil {
@@ -44,14 +45,14 @@ func (d DependencyDirectory) GoInstall(tool, packageURl, version string) error {
 
 // Checks if a tool in the dependency directory needs to be rebuild.
 func (d DependencyDirectory) NeedsRebuild(tool, version string) (needsRebuild bool, err error) {
-	versionFile := fmt.Sprintf(string(d)+"/versions/%s/v%s", tool, version)
-	if err := ensureFile(versionFile); err != nil {
+	versionFile := path.Join(string(d), "versions", tool, "v"+version)
+	if err := EnsureFile(versionFile); err != nil {
 		return false, fmt.Errorf("ensure file: %w", err)
 	}
 
 	// Checks "tool" binary file modification date against version file.
 	// If the version file is newer, tool is of the wrong version.
-	rebuild, err := target.Path(string(d)+"/bin/"+tool, versionFile)
+	rebuild, err := target.Path(path.Join(d.Bin(), tool), versionFile)
 	if err != nil {
 		return false, fmt.Errorf("rebuild check: %w", err)
 	}
@@ -59,8 +60,8 @@ func (d DependencyDirectory) NeedsRebuild(tool, version string) (needsRebuild bo
 	return rebuild, nil
 }
 
-// ensure a file and it's file path exist.
-func ensureFile(file string) error {
+// Ensure a file and it's file path exist.
+func EnsureFile(file string) error {
 	dir := filepath.Dir(file)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return fmt.Errorf("creating directory %s: %w", dir, err)

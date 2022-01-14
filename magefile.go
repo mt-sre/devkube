@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/magefile/mage/mg"
@@ -32,8 +33,8 @@ func init() {
 		panic(fmt.Errorf("getting work dir: %w", err))
 	}
 
-	depsDir = magedeps.DependencyDirectory(workDir + "/.deps")
-	cacheDir = workDir + "/.cache"
+	depsDir = magedeps.DependencyDirectory(path.Join(workDir, ".deps"))
+	cacheDir = path.Join(workDir, ".cache")
 
 	// Path
 	os.Setenv("PATH", depsDir.Bin()+":"+os.Getenv("PATH"))

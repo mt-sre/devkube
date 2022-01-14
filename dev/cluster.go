@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 
 	"github.com/go-logr/logr"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -81,7 +82,7 @@ func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 	c := &Cluster{
 		Scheme:     runtime.NewScheme(),
 		WorkDir:    workDir,
-		Kubeconfig: workDir + "/kubeconfig.yaml",
+		Kubeconfig: path.Join(workDir, "kubeconfig.yaml"),
 	}
 
 	// Add default schemes

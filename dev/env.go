@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -94,7 +95,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 		return fmt.Errorf("creating workdir: %w", err)
 	}
 
-	kindConfigPath := env.WorkDir + "/kind.yaml"
+	kindConfigPath := path.Join(env.WorkDir, "/kind.yaml")
 	if err := ioutil.WriteFile(
 		kindConfigPath, []byte(kindConfig), os.ModePerm); err != nil {
 		return fmt.Errorf("creating kind cluster config: %w", err)
