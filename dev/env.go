@@ -43,69 +43,10 @@ type EnvironmentOption interface {
 	ApplyToEnvironmentConfig(c *EnvironmentConfig)
 }
 
-type WithClusterInitializers []ClusterInitializer
-
-func (i WithClusterInitializers) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
-	c.ClusterInitializers = append(c.ClusterInitializers, i...)
-}
-
-type WithContainerRuntime string
-
-func (cr WithContainerRuntime) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
-	c.ContainerRuntime = string(cr)
-}
-
-type WithNewClusterFunc NewClusterFunc
-
-func (f WithNewClusterFunc) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
-	c.NewCluster = NewClusterFunc(f)
-}
-
-type WithClusterOptions []ClusterOption
-
-func (opts WithClusterOptions) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
-	c.ClusterOptions = opts
-}
-
 type NewClusterFunc func(kubeconfigPath string, opts ...ClusterOption) (*Cluster, error)
 
 type ClusterInitializer interface {
 	Init(ctx context.Context, cluster *Cluster) error
-}
-
-// Load objects from given folder paths and applies them into the cluster.
-type ClusterLoadObjectsFromFolders []string
-
-func (l ClusterLoadObjectsFromFolders) Init(
-	ctx context.Context, cluster *Cluster) error {
-	return cluster.CreateAndWaitFromFolders(ctx, l)
-}
-
-// Load objects from given file paths and applies them into the cluster.
-type ClusterLoadObjectsFromFiles []string
-
-func (l ClusterLoadObjectsFromFiles) Init(
-	ctx context.Context, cluster *Cluster) error {
-	return cluster.CreateAndWaitFromFiles(ctx, l)
-}
-
-type ClusterLoadObjectsFromHttp []string
-
-func (l ClusterLoadObjectsFromHttp) Init(
-	ctx context.Context, cluster *Cluster) error {
-	return cluster.CreateAndWaitFromHttp(ctx, l)
-}
-
-type ClusterHelmInstall struct {
-	RepoName, RepoURL, PackageName, Namespace, ReleaseName string
-	SetVars                                                []string
-}
-
-func (l ClusterHelmInstall) Init(
-	ctx context.Context, cluster *Cluster) error {
-	return cluster.HelmInstall(
-		ctx, cluster,
-		l.RepoName, l.RepoURL, l.PackageName, l.ReleaseName, l.Namespace, l.SetVars)
 }
 
 // Environment represents a development environment.
@@ -182,7 +123,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 
 	// Create _all_ the clients
 	cluster, err := NewCluster(
-		env.WorkDir+"/kubeconfig.yaml", env.config.ClusterOptions...)
+		env.WorkDir, env.config.ClusterOptions...)
 	if err != nil {
 		return fmt.Errorf("creating k8s clients: %w", err)
 	}

@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/exec"
-	"path"
 
 	"github.com/go-logr/logr"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -30,14 +27,21 @@ var defaultSchemeBuilder runtime.SchemeBuilder = runtime.SchemeBuilder{
 type ClusterConfig struct {
 	Logger        logr.Logger
 	SchemeBuilder runtime.SchemeBuilder
-	NewWaiter     ClusterNewWaiterFunc
+	NewWaiter     NewWaiterFunc
 	WaitOptions   []WaitOption
+	NewHelm       NewHelmFunc
+	HelmOptions   []HelmOption
 }
 
-type ClusterNewWaiterFunc func(
+type NewWaiterFunc func(
 	client client.Client, scheme *runtime.Scheme,
 	defaultOpts ...WaitOption,
 ) *Waiter
+
+type NewHelmFunc func(
+	workDir, kubeconfig string,
+	opts ...HelmOption,
+) *Helm
 
 func (c *ClusterConfig) Default() {
 	if c.Logger.GetSink() == nil {
@@ -45,6 +49,9 @@ func (c *ClusterConfig) Default() {
 	}
 	if c.NewWaiter == nil {
 		c.NewWaiter = NewWaiter
+	}
+	if c.NewHelm == nil {
+		c.NewHelm = NewHelm
 	}
 	if c.WaitOptions == nil {
 		c.WaitOptions = append(c.WaitOptions, WithLogger(c.Logger))
@@ -61,6 +68,7 @@ type Cluster struct {
 	RestConfig *rest.Config
 	CtrlClient client.Client
 	Waiter     *Waiter
+	Helm       *Helm
 	WorkDir    string
 	// Path to the kubeconfig of the cluster
 	Kubeconfig string
@@ -108,6 +116,7 @@ func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 	}
 
 	c.Waiter = c.config.NewWaiter(c.CtrlClient, c.Scheme, c.config.WaitOptions...)
+	c.Helm = c.config.NewHelm(c.WorkDir, c.Kubeconfig, c.config.HelmOptions...)
 
 	return c, nil
 }
@@ -115,7 +124,9 @@ func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 // Load kube objects from a list of http urls,
 // create these objects and wait for them to be ready.
 func (c *Cluster) CreateAndWaitFromHttp(
-	ctx context.Context, urls []string) error {
+	ctx context.Context, urls []string,
+	opts ...WaitOption,
+) error {
 	var client http.Client
 	var objects []unstructured.Unstructured
 	for _, url := range urls {
@@ -144,7 +155,7 @@ func (c *Cluster) CreateAndWaitFromHttp(
 	}
 
 	for i := range objects {
-		if err := c.CreateAndWaitForReadiness(ctx, &objects[i]); err != nil {
+		if err := c.CreateAndWaitForReadiness(ctx, &objects[i], opts...); err != nil {
 			return fmt.Errorf("creating object: %w", err)
 		}
 	}
@@ -154,7 +165,9 @@ func (c *Cluster) CreateAndWaitFromHttp(
 // Load kube objects from a list of files,
 // create these objects and wait for them to be ready.
 func (c *Cluster) CreateAndWaitFromFiles(
-	ctx context.Context, files []string) error {
+	ctx context.Context, files []string,
+	opts ...WaitOption,
+) error {
 	var objects []unstructured.Unstructured
 	for _, file := range files {
 		objs, err := LoadKubernetesObjectsFromFile(file)
@@ -166,7 +179,7 @@ func (c *Cluster) CreateAndWaitFromFiles(
 	}
 
 	for i := range objects {
-		if err := c.CreateAndWaitForReadiness(ctx, &objects[i]); err != nil {
+		if err := c.CreateAndWaitForReadiness(ctx, &objects[i], opts...); err != nil {
 			return fmt.Errorf("creating object: %w", err)
 		}
 	}
@@ -176,7 +189,9 @@ func (c *Cluster) CreateAndWaitFromFiles(
 // Load kube objects from a list of folders,
 // create these objects and wait for them to be ready.
 func (c *Cluster) CreateAndWaitFromFolders(
-	ctx context.Context, folders []string) error {
+	ctx context.Context, folders []string,
+	opts ...WaitOption,
+) error {
 	var objects []unstructured.Unstructured
 	for _, folder := range folders {
 		objs, err := LoadKubernetesObjectsFromFolder(folder)
@@ -188,7 +203,7 @@ func (c *Cluster) CreateAndWaitFromFolders(
 	}
 
 	for i := range objects {
-		if err := c.CreateAndWaitForReadiness(ctx, &objects[i]); err != nil {
+		if err := c.CreateAndWaitForReadiness(ctx, &objects[i], opts...); err != nil {
 			return fmt.Errorf("creating object: %w", err)
 		}
 	}
@@ -198,6 +213,7 @@ func (c *Cluster) CreateAndWaitFromFolders(
 // Creates the given objects and waits for them to be considered ready.
 func (c *Cluster) CreateAndWaitForReadiness(
 	ctx context.Context, object client.Object,
+	opts ...WaitOption,
 ) error {
 	if err := c.CtrlClient.Create(ctx, object); err != nil &&
 		!errors.IsAlreadyExists(err) {
@@ -216,73 +232,4 @@ func (c *Cluster) CreateAndWaitForReadiness(
 		return fmt.Errorf("waiting for object: %w", err)
 	}
 	return nil
-}
-
-func (c *Cluster) HelmInstall(
-	ctx context.Context, cluster *Cluster,
-	repoName, repoURL, packageName, releaseName, namespace string,
-	setVars []string,
-) error {
-	// Repo Add
-	if err := c.execHelmCommand(
-		ctx, os.Stdout, os.Stderr,
-		"repo", "add", repoName, repoURL,
-	); err != nil {
-		return fmt.Errorf("helm repo add: %w", err)
-	}
-
-	// Repo Update
-	if err := c.execHelmCommand(
-		ctx, os.Stdout, os.Stderr,
-		"repo", "update",
-	); err != nil {
-		return fmt.Errorf("helm repo update: %w", err)
-	}
-
-	// Install
-	installFlags := []string{
-		"install", releaseName, repoName + "/" + packageName,
-	}
-	if len(namespace) > 0 {
-		installFlags = append(installFlags, "-n", namespace)
-	}
-	for _, s := range setVars {
-		installFlags = append(installFlags, "--set", s)
-	}
-	if err := c.execHelmCommand(
-		ctx, os.Stdout, os.Stderr,
-		installFlags...,
-	); err != nil {
-		return fmt.Errorf("helm repo update: %w", err)
-	}
-	return nil
-}
-
-func (c *Cluster) execHelmCommand(
-	ctx context.Context, stdout, stderr io.Writer, args ...string,
-) error {
-	helmCacheDir := path.Join(c.WorkDir, "helm/cache")
-	helmConfigDir := path.Join(c.WorkDir + "helm/config")
-	helmDataDir := path.Join(c.WorkDir + "helm/data")
-
-	for _, dir := range []string{helmCacheDir, helmConfigDir, helmDataDir} {
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return fmt.Errorf("create helm dir %s: %w", dir, err)
-		}
-	}
-
-	helmCmd := exec.CommandContext( //nolint:gosec
-		ctx, "helm", args...,
-	)
-	helmCmd.Env = os.Environ()
-	helmCmd.Env = append(
-		helmCmd.Env,
-		"KUBECONFIG="+c.Kubeconfig,
-		"HELM_CACHE_HOME="+helmCacheDir,
-		"HELM_CONFIG_HOME="+helmConfigDir,
-		"HELM_DATA_HOME="+helmDataDir,
-	)
-	helmCmd.Stdout = stdout
-	helmCmd.Stderr = stderr
-	return helmCmd.Run()
 }
