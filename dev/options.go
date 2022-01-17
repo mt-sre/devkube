@@ -82,7 +82,14 @@ func (i WithClusterInitializers) ApplyToEnvironmentConfig(c *EnvironmentConfig) 
 	c.ClusterInitializers = append(c.ClusterInitializers, i...)
 }
 
-type WithContainerRuntime string
+type ContainerRuntime string
+
+const (
+	Podman ContainerRuntime = "podman"
+	Docker ContainerRuntime = "docker"
+)
+
+type WithContainerRuntime ContainerRuntime
 
 func (cr WithContainerRuntime) ApplyToEnvironmentConfig(c *EnvironmentConfig) {
 	c.ContainerRuntime = string(cr)

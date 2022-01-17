@@ -12,7 +12,7 @@ func ExampleEnvironment() {
 	_ = NewEnvironment(
 		"cheese", ".cache/dev-env/cheese",
 		WithLogger(log),
-		WithContainerRuntime("podman"),
+		WithContainerRuntime(Podman),
 		WithClusterInitializers{
 			ClusterLoadObjectsFromFiles{
 				"config/crd01.yaml",
