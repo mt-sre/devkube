@@ -83,16 +83,18 @@ func (env *Environment) Init(ctx context.Context) error {
 apiVersion: kind.x-k8s.io/v1alpha4
 `
 
-	// Workaround for https://github.com/kubernetes-sigs/kind/issues/2411
-	// For BTRFS on LUKS.
-	if _, err := os.Lstat("/dev/dm-0"); err == nil {
-		kindConfig += `nodes:
-- role: control-plane
-  extraMounts:
-    - hostPath: /dev/dm-0
-      containerPath: /dev/dm-0
-      propagation: HostToContainer
-`
+	if env.config.ContainerRuntime == Podman {
+		// Workaround for https://github.com/kubernetes-sigs/kind/issues/2411
+		// For BTRFS on LUKS.
+		if _, err := os.Lstat("/dev/dm-0"); err == nil {
+			kindConfig += `nodes:
+	- role: control-plane
+		extraMounts:
+			- hostPath: /dev/dm-0
+				containerPath: /dev/dm-0
+				propagation: HostToContainer
+	`
+		}
 	}
 
 	if err := os.MkdirAll(env.WorkDir, os.ModePerm); err != nil {
@@ -100,7 +102,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 	}
 
 	kubeconfigPath := path.Join(env.WorkDir, "kubeconfig.yaml")
-	kindconfigPath := path.Join(env.WorkDir, "/kind.yaml")
+	kindconfigPath := path.Join(env.WorkDir, "kind.yaml")
 	if err := ioutil.WriteFile(
 		kindconfigPath, []byte(kindConfig), os.ModePerm); err != nil {
 		return fmt.Errorf("creating kind cluster config: %w", err)
@@ -108,8 +110,8 @@ apiVersion: kind.x-k8s.io/v1alpha4
 
 	// Needs cluster creation?
 	var checkOutput bytes.Buffer
-	if err := env.execKindCommand(ctx, &checkOutput, nil, "get", "clusters"); err != nil {
-		return fmt.Errorf("getting existing kind clusters: %w", err)
+	if err := env.execKindCommand(ctx, &checkOutput, os.Stderr, "get", "clusters"); err != nil {
+		return fmt.Errorf("getting existing kind clusters: %w\n%s", err, checkOutput.String())
 	}
 
 	// Only create cluster if it is not already there.
