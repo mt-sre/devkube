@@ -48,7 +48,7 @@ type NewWaiterFunc func(
 type NewHelmFunc func(
 	workDir, kubeconfig string,
 	opts ...HelmOption,
-) *Helm
+) helm
 
 type NewRestConfigFunc func(kubeconfig string) (*rest.Config, error)
 
@@ -68,7 +68,12 @@ func (c *ClusterConfig) Default() {
 		c.NewWaiter = NewWaiter
 	}
 	if c.NewHelm == nil {
-		c.NewHelm = NewHelm
+		c.NewHelm = func(
+			workDir, kubeconfig string,
+			opts ...HelmOption,
+		) helm {
+			return NewHelm(workDir, kubeconfig, opts...)
+		}
 	}
 	if c.Kubeconfig == "" {
 		c.Kubeconfig = path.Join(c.WorkDir, "kubeconfig.yaml")
@@ -92,13 +97,37 @@ type ClusterOption interface {
 	ApplyToClusterConfig(c *ClusterConfig)
 }
 
+type cluster interface {
+	CreateAndWaitFromHttp(
+		ctx context.Context, urls []string,
+		opts ...WaitOption,
+	) error
+	CreateAndWaitFromFiles(
+		ctx context.Context, files []string,
+		opts ...WaitOption,
+	) error
+	CreateAndWaitFromFolders(
+		ctx context.Context, folders []string,
+		opts ...WaitOption,
+	) error
+	CreateAndWaitForReadiness(
+		ctx context.Context, object client.Object,
+		opts ...WaitOption,
+	) error
+	Kubeconfig() string
+	Helm() helm
+	CtrlClient() client.Client
+}
+
+var _ cluster = (*Cluster)(nil)
+
 // Container object to hold kubernetes client interfaces and configuration.
 type Cluster struct {
-	Scheme     *runtime.Scheme
-	RestConfig *rest.Config
-	CtrlClient client.Client
-	Waiter     *Waiter
-	Helm       *Helm
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
+	ctrlClient client.Client
+	waiter     *Waiter
+	helm       helm
 
 	config ClusterConfig
 }
@@ -106,14 +135,14 @@ type Cluster struct {
 // Creates a new Cluster object to interact with a Kubernetes cluster.
 func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 	c := &Cluster{
-		Scheme: runtime.NewScheme(),
+		scheme: runtime.NewScheme(),
 		config: ClusterConfig{
 			WorkDir: workDir,
 		},
 	}
 
 	// Add default schemes
-	if err := defaultSchemeBuilder.AddToScheme(c.Scheme); err != nil {
+	if err := defaultSchemeBuilder.AddToScheme(c.scheme); err != nil {
 		return nil, fmt.Errorf("adding defaults to scheme: %w", err)
 	}
 
@@ -125,34 +154,42 @@ func NewCluster(workDir string, opts ...ClusterOption) (*Cluster, error) {
 
 	// Apply schemes from Options
 	if c.config.SchemeBuilder != nil {
-		if err := c.config.SchemeBuilder.AddToScheme(c.Scheme); err != nil {
+		if err := c.config.SchemeBuilder.AddToScheme(c.scheme); err != nil {
 			return nil, fmt.Errorf("adding to scheme: %w", err)
 		}
 	}
 
 	var err error
 	// Create RestConfig
-	c.RestConfig, err = c.config.NewRestConfig(c.config.Kubeconfig)
+	c.restConfig, err = c.config.NewRestConfig(c.config.Kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("getting rest.Config from kubeconfig: %w", err)
 	}
 
 	// Create Controller Runtime Client
-	c.CtrlClient, err = c.config.NewCtrlClient(c.RestConfig, client.Options{
-		Scheme: c.Scheme,
+	c.ctrlClient, err = c.config.NewCtrlClient(c.restConfig, client.Options{
+		Scheme: c.scheme,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating new ctrl client: %w", err)
 	}
 
-	c.Waiter = c.config.NewWaiter(
-		c.CtrlClient, c.Scheme,
+	c.waiter = c.config.NewWaiter(
+		c.ctrlClient, c.scheme,
 		c.config.WaitOptions...)
-	c.Helm = c.config.NewHelm(
+	c.helm = c.config.NewHelm(
 		workDir, c.config.Kubeconfig,
 		c.config.HelmOptions...)
 
 	return c, nil
+}
+
+func (c *Cluster) Helm() helm {
+	return c.helm
+}
+
+func (c *Cluster) CtrlClient() client.Client {
+	return c.ctrlClient
 }
 
 // Returns the path to the kubeconfig of the cluster.
@@ -254,12 +291,12 @@ func (c *Cluster) CreateAndWaitForReadiness(
 	ctx context.Context, object client.Object,
 	opts ...WaitOption,
 ) error {
-	if err := c.CtrlClient.Create(ctx, object); err != nil &&
+	if err := c.ctrlClient.Create(ctx, object); err != nil &&
 		!errors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating object: %w", err)
 	}
 
-	if err := c.Waiter.WaitForReadiness(ctx, object); err != nil {
+	if err := c.waiter.WaitForReadiness(ctx, object); err != nil {
 		var unknownTypeErr *UnknownTypeError
 		if goerrors.As(err, &unknownTypeErr) {
 			// A lot of types don't require waiting for readiness,

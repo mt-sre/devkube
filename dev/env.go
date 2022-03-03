@@ -3,6 +3,7 @@ package dev
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,13 +28,15 @@ type EnvironmentConfig struct {
 // Apply default configuration.
 func (c *EnvironmentConfig) Default() {
 	if len(c.ContainerRuntime) == 0 {
-		c.ContainerRuntime = Podman
+		c.ContainerRuntime = ContainerRuntimeAuto
 	}
 	if c.Logger.GetSink() == nil {
 		c.Logger = logr.Discard()
 	}
 	if c.NewCluster == nil {
-		c.NewCluster = NewCluster
+		c.NewCluster = func(kubeconfigPath string, opts ...ClusterOption) (cluster, error) {
+			return NewCluster(kubeconfigPath, opts...)
+		}
 	}
 
 	// Prepend logger option to always default to the same logger for subcomponents.
@@ -48,27 +51,30 @@ type EnvironmentOption interface {
 	ApplyToEnvironmentConfig(c *EnvironmentConfig)
 }
 
-type NewClusterFunc func(kubeconfigPath string, opts ...ClusterOption) (*Cluster, error)
+type NewClusterFunc func(kubeconfigPath string, opts ...ClusterOption) (cluster, error)
 
 type ClusterInitializer interface {
-	Init(ctx context.Context, cluster *Cluster) error
+	Init(ctx context.Context, cluster cluster) error
 }
 
 // Environment represents a development environment.
 type Environment struct {
-	Name string
+	name string
 	// Working directory of the environment.
 	// Temporary files/kubeconfig etc. will be stored here.
-	WorkDir string
-	Cluster *Cluster
-	config  EnvironmentConfig
+	workDir string
+	cluster cluster
+	// container runtime in use by the environment
+	// evaluated to "docker" or "podman" when config is set to "auto"
+	containerRuntime ContainerRuntime
+	config           EnvironmentConfig
 }
 
 // Creates a new development environment.
 func NewEnvironment(name, workDir string, opts ...EnvironmentOption) *Environment {
 	env := &Environment{
-		Name:    name,
-		WorkDir: workDir,
+		name:    name,
+		workDir: workDir,
 	}
 	for _, opt := range opts {
 		opt.ApplyToEnvironmentConfig(&env.config)
@@ -79,74 +85,34 @@ func NewEnvironment(name, workDir string, opts ...EnvironmentOption) *Environmen
 
 // Initializes the environment and prepares it for use.
 func (env *Environment) Init(ctx context.Context) error {
-	kindConfig := `kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-`
-
-	if env.config.ContainerRuntime == Podman {
-		// Workaround for https://github.com/kubernetes-sigs/kind/issues/2411
-		// For BTRFS on LUKS.
-		if _, err := os.Lstat("/dev/dm-0"); err == nil {
-			kindConfig += `nodes:
-	- role: control-plane
-		extraMounts:
-			- hostPath: /dev/dm-0
-				containerPath: /dev/dm-0
-				propagation: HostToContainer
-	`
-		}
-	}
-
-	if err := os.MkdirAll(env.WorkDir, os.ModePerm); err != nil {
+	// ensure workdir
+	if err := os.MkdirAll(env.workDir, os.ModePerm); err != nil {
 		return fmt.Errorf("creating workdir: %w", err)
 	}
 
-	kubeconfigPath := path.Join(env.WorkDir, "kubeconfig.yaml")
-	kindconfigPath := path.Join(env.WorkDir, "kind.yaml")
-	if err := ioutil.WriteFile(
-		kindconfigPath, []byte(kindConfig), os.ModePerm); err != nil {
-		return fmt.Errorf("creating kind cluster config: %w", err)
-	}
-
-	// Needs cluster creation?
-	var checkOutput bytes.Buffer
-	if err := env.execKindCommand(ctx, &checkOutput, os.Stderr, "get", "clusters"); err != nil {
-		return fmt.Errorf("getting existing kind clusters: %w\n%s", err, checkOutput.String())
-	}
-
-	// Only create cluster if it is not already there.
-	createCluster := !strings.Contains(checkOutput.String(), env.Name+"\n")
-	if createCluster {
-		// Create cluster
-		if err := env.execKindCommand(
-			ctx, os.Stdout, os.Stderr,
-			"create", "cluster",
-			"--kubeconfig="+kubeconfigPath,
-			"--name="+env.Name,
-			"--config="+kindconfigPath,
-		); err != nil {
-			return fmt.Errorf("creating kind cluster: %w", err)
+	// determine container runtime
+	if env.config.ContainerRuntime == ContainerRuntimeAuto {
+		cr, err := DetermineContainerRuntime()
+		if err != nil {
+			return err
 		}
+		env.containerRuntime = cr
+	} else {
+		env.containerRuntime = env.config.ContainerRuntime
 	}
 
-	// Create _all_ the clients
-	cluster, err := env.config.NewCluster(
-		env.WorkDir, append(env.config.ClusterOptions, WithKubeconfigPath(kubeconfigPath))...)
+	// Ensure the cluster is there
+	cluster, err := env.ensureCluster(ctx)
 	if err != nil {
-		return fmt.Errorf("creating k8s clients: %w", err)
+		return fmt.Errorf("ensuring cluster: %w", err)
 	}
-	env.Cluster = cluster
-
-	// Run ClusterInitializers
-	if createCluster {
-		for _, initializer := range env.config.ClusterInitializers {
-			if err := initializer.Init(ctx, cluster); err != nil {
-				return fmt.Errorf("running cluster initializer: %w", err)
-			}
-		}
-	}
+	env.cluster = cluster
 
 	return nil
+}
+
+func (env *Environment) WorkDir() string {
+	return env.workDir
 }
 
 // Destroy/Teardown the development environment.
@@ -154,8 +120,8 @@ func (env *Environment) Destroy(ctx context.Context) error {
 	if err := env.execKindCommand(
 		ctx, os.Stdout, os.Stderr,
 		"delete", "cluster",
-		"--kubeconfig="+path.Join(env.WorkDir, "kubeconfig.yaml"),
-		"--name="+env.Name,
+		"--kubeconfig="+path.Join(env.workDir, "kubeconfig.yaml"),
+		"--name="+env.name,
 	); err != nil {
 		return fmt.Errorf("deleting kind cluster: %w", err)
 	}
@@ -168,7 +134,7 @@ func (env *Environment) LoadImageFromTar(
 	if err := env.execKindCommand(
 		ctx, os.Stdout, os.Stderr,
 		"load", "image-archive", filePath,
-		"--name="+env.Name,
+		"--name="+env.name,
 	); err != nil {
 		return fmt.Errorf("loading image archive: %w", err)
 	}
@@ -182,10 +148,112 @@ func (env *Environment) execKindCommand(
 		ctx, "kind", args...,
 	)
 	kindCmd.Env = os.Environ()
-	if env.config.ContainerRuntime == "podman" {
+	if env.containerRuntime == "podman" {
 		kindCmd.Env = append(kindCmd.Env, "KIND_EXPERIMENTAL_PROVIDER=podman")
 	}
 	kindCmd.Stdout = stdout
 	kindCmd.Stderr = stderr
 	return kindCmd.Run()
+}
+
+func (env *Environment) ensureCluster(ctx context.Context) (cluster, error) {
+	kubeconfigPath := path.Join(env.workDir, "kubeconfig.yaml")
+
+	clusterExists, err := env.kindClusterExist(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("checking if cluster exists: %w", err)
+	}
+
+	if !clusterExists {
+		kindConfigPath, err := env.writeKindConfig()
+		if err != nil {
+			return nil, fmt.Errorf("writing kind config: %w", err)
+		}
+
+		// Create cluster
+		if err := env.execKindCommand(
+			ctx, os.Stdout, os.Stderr,
+			"create", "cluster",
+			"--kubeconfig="+kubeconfigPath,
+			"--name="+env.name,
+			"--config="+kindConfigPath,
+		); err != nil {
+			return nil, fmt.Errorf("creating kind cluster: %w", err)
+		}
+	}
+
+	// Create _all_ the clients
+	cluster, err := env.config.NewCluster(
+		env.workDir, append(env.config.ClusterOptions, WithKubeconfigPath(kubeconfigPath))...)
+	if err != nil {
+		return nil, fmt.Errorf("creating k8s clients: %w", err)
+	}
+	env.cluster = cluster
+
+	// Run ClusterInitializers
+	if !clusterExists {
+		for _, initializer := range env.config.ClusterInitializers {
+			if err := initializer.Init(ctx, cluster); err != nil {
+				return nil, fmt.Errorf("running cluster initializer: %w", err)
+			}
+		}
+	}
+	return cluster, nil
+}
+
+func (env *Environment) kindClusterExist(ctx context.Context) (bool, error) {
+	var checkOutput bytes.Buffer
+	if err := env.execKindCommand(ctx, &checkOutput, os.Stderr, "get", "clusters"); err != nil {
+		return false, fmt.Errorf("getting existing kind clusters: %w\n%s", err, checkOutput.String())
+	}
+	return strings.Contains(checkOutput.String(), env.name+"\n"), nil
+}
+
+const kindConfigFile = "kind.yaml"
+
+func (env *Environment) writeKindConfig() (kindConfigPath string, err error) {
+	kindConfigPath = path.Join(env.workDir, kindConfigFile)
+	kindConfig := `kind: Cluster
+		apiVersion: kind.x-k8s.io/v1alpha4
+`
+
+	if env.containerRuntime == ContainerRuntimePodman {
+		// Workaround for https://github.com/kubernetes-sigs/kind/issues/2411
+		// For BTRFS on LUKS.
+		if _, err := os.Lstat("/dev/dm-0"); err == nil {
+			kindConfig += `nodes:
+	- role: control-plane
+		extraMounts:
+		- hostPath: /dev/dm-0
+		containerPath: /dev/dm-0
+		propagation: HostToContainer
+		`
+		}
+	}
+	if err := ioutil.WriteFile(
+		kindConfigPath, []byte(kindConfig), os.ModePerm); err != nil {
+		return "", fmt.Errorf("creating kind cluster config: %w", err)
+	}
+	return kindConfigPath, nil
+}
+
+// Try to figure out the installed container runtime from the environment.
+func DetermineContainerRuntime() (ContainerRuntime, error) {
+	// check for docker
+	if _, err := exec.LookPath("docker"); err == nil {
+		return ContainerRuntimeDocker, nil
+	} else if err != nil &&
+		!errors.Is(err, exec.ErrNotFound) {
+		return "", fmt.Errorf("looking up docker binary: %w", err)
+	}
+
+	// check for podman
+	if _, err := exec.LookPath("podman"); err == nil {
+		return ContainerRuntimePodman, nil
+	} else if err != nil &&
+		!errors.Is(err, exec.ErrNotFound) {
+		return "", fmt.Errorf("looking up podman binary: %w", err)
+	}
+
+	return "", fmt.Errorf("no container runtime found, tried: docker, podman")
 }

@@ -13,7 +13,7 @@ import (
 type ClusterLoadObjectsFromFolders []string
 
 func (l ClusterLoadObjectsFromFolders) Init(
-	ctx context.Context, cluster *Cluster) error {
+	ctx context.Context, cluster cluster) error {
 	return cluster.CreateAndWaitFromFolders(ctx, l)
 }
 
@@ -21,7 +21,7 @@ func (l ClusterLoadObjectsFromFolders) Init(
 type ClusterLoadObjectsFromFiles []string
 
 func (l ClusterLoadObjectsFromFiles) Init(
-	ctx context.Context, cluster *Cluster) error {
+	ctx context.Context, cluster cluster) error {
 	return cluster.CreateAndWaitFromFiles(ctx, l)
 }
 
@@ -29,7 +29,7 @@ func (l ClusterLoadObjectsFromFiles) Init(
 type ClusterLoadObjectsFromHttp []string
 
 func (l ClusterLoadObjectsFromHttp) Init(
-	ctx context.Context, cluster *Cluster) error {
+	ctx context.Context, cluster cluster) error {
 	return cluster.CreateAndWaitFromHttp(ctx, l)
 }
 
@@ -40,11 +40,11 @@ type ClusterHelmInstall struct {
 }
 
 func (h ClusterHelmInstall) Init(
-	ctx context.Context, cluster *Cluster) error {
-	if err := cluster.Helm.HelmRepoAdd(ctx, h.RepoName, h.RepoURL); err != nil {
+	ctx context.Context, cluster cluster) error {
+	if err := cluster.Helm().HelmRepoAdd(ctx, h.RepoName, h.RepoURL); err != nil {
 		return err
 	}
-	if err := cluster.Helm.HelmRepoUpdate(ctx); err != nil {
+	if err := cluster.Helm().HelmRepoUpdate(ctx); err != nil {
 		return err
 	}
 
@@ -53,9 +53,9 @@ func (h ClusterHelmInstall) Init(
 			Name: h.Namespace,
 		},
 	}
-	if err := cluster.CtrlClient.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+	if err := cluster.CtrlClient().Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating namespace for helm: %w", err)
 	}
 
-	return cluster.Helm.HelmInstall(ctx, cluster, h.RepoName, h.PackageName, h.ReleaseName, h.Namespace, h.SetVars)
+	return cluster.Helm().HelmInstall(ctx, cluster, h.RepoName, h.PackageName, h.ReleaseName, h.Namespace, h.SetVars)
 }

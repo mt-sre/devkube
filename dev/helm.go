@@ -29,20 +29,32 @@ type HelmOption interface {
 }
 
 type Helm struct {
-	HelmConfig
+	config HelmConfig
+}
+
+type helm interface {
+	HelmRepoAdd(
+		ctx context.Context, repoName, repoURL string,
+	) error
+	HelmRepoUpdate(ctx context.Context) error
+	HelmInstall(
+		ctx context.Context, cluster cluster,
+		repoName, packageName, releaseName, namespace string,
+		setVars []string,
+	) error
 }
 
 func NewHelm(workDir, kubeconfig string, opts ...HelmOption) *Helm {
 	h := &Helm{
-		HelmConfig: HelmConfig{
+		config: HelmConfig{
 			WorkDir:    workDir,
 			Kubeconfig: kubeconfig,
 		},
 	}
 	for _, opt := range opts {
-		opt.ApplyToHelmConfig(&h.HelmConfig)
+		opt.ApplyToHelmConfig(&h.config)
 	}
-	h.HelmConfig.Default()
+	h.config.Default()
 	return h
 }
 
@@ -72,7 +84,7 @@ func (h *Helm) HelmRepoUpdate(ctx context.Context) error {
 
 // Wrapper arround "helm install"
 func (h *Helm) HelmInstall(
-	ctx context.Context, cluster *Cluster,
+	ctx context.Context, cluster cluster,
 	repoName, packageName, releaseName, namespace string,
 	setVars []string,
 ) error {
@@ -97,9 +109,9 @@ func (h *Helm) HelmInstall(
 func (h *Helm) execHelmCommand(
 	ctx context.Context, stdout, stderr io.Writer, args ...string,
 ) error {
-	helmCacheDir := path.Join(h.WorkDir, "helm/cache")
-	helmConfigDir := path.Join(h.WorkDir, "helm/config")
-	helmDataDir := path.Join(h.WorkDir, "helm/data")
+	helmCacheDir := path.Join(h.config.WorkDir, "helm/cache")
+	helmConfigDir := path.Join(h.config.WorkDir, "helm/config")
+	helmDataDir := path.Join(h.config.WorkDir, "helm/data")
 
 	for _, dir := range []string{helmCacheDir, helmConfigDir, helmDataDir} {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -113,7 +125,7 @@ func (h *Helm) execHelmCommand(
 	helmCmd.Env = os.Environ()
 	helmCmd.Env = append(
 		helmCmd.Env,
-		"KUBECONFIG="+h.Kubeconfig,
+		"KUBECONFIG="+h.config.Kubeconfig,
 		"HELM_CACHE_HOME="+helmCacheDir,
 		"HELM_CONFIG_HOME="+helmConfigDir,
 		"HELM_DATA_HOME="+helmDataDir,

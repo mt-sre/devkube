@@ -13,6 +13,14 @@ import (
 
 type DependencyDirectory string
 
+// Ensures the dependency directory is present.
+func (d DependencyDirectory) Init() error {
+	if err := os.MkdirAll(d.Bin(), os.ModePerm); err != nil {
+		return fmt.Errorf("create dependency dir: %w", err)
+	}
+	return nil
+}
+
 // Returns the /bin directory containing the dependency binaries.
 func (d DependencyDirectory) Bin() string {
 	return path.Join(string(d), "bin")
@@ -20,10 +28,6 @@ func (d DependencyDirectory) Bin() string {
 
 // Go install a dependency into the dependency directory
 func (d DependencyDirectory) GoInstall(tool, packageURl, version string) error {
-	if err := os.MkdirAll(string(d), os.ModePerm); err != nil {
-		return fmt.Errorf("create dependency dir: %w", err)
-	}
-
 	needsRebuild, err := d.NeedsRebuild(tool, version)
 	if err != nil {
 		return err
