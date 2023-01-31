@@ -19,7 +19,7 @@ type ImageBuildInfo struct {
 
 type ImagePushInfo struct {
 	DigestFile string
-	buildInfo  *ImageBuildInfo
+	BuildInfo  *ImageBuildInfo
 }
 
 func must(err error) {
@@ -30,13 +30,9 @@ func must(err error) {
 
 // BuildImage is a generic image build function,
 // requires the binaries to be built beforehand
-func BuildImage(buildInfo *ImageBuildInfo, populateCache func(), deps []interface{}) {
+func BuildImage(buildInfo *ImageBuildInfo, deps []interface{}) {
 	if len(deps) > 0 {
-		mg.Deps(deps...)
-	}
-
-	if populateCache != nil {
-		populateCache()
+		mg.SerialDeps(deps...)
 	}
 
 	buildCmd := []string{buildInfo.Runtime, "build", "-t", buildInfo.ImageTag}
@@ -61,8 +57,8 @@ func BuildImage(buildInfo *ImageBuildInfo, populateCache func(), deps []interfac
 }
 
 // PushImage builds and pushes only the given container image to the default registry.
-func PushImage(pushInfo *ImagePushInfo, populateCache func(), deps []interface{}) {
-	mg.SerialDeps(mg.F(BuildImage, pushInfo.buildInfo, populateCache, deps))
+func PushImage(pushInfo *ImagePushInfo, deps []interface{}) {
+	mg.SerialDeps(mg.F(BuildImage, pushInfo.BuildInfo, deps))
 
 	// Login to container registry when running on AppSRE Jenkins.
 	_, isJenkins := os.LookupEnv("JENKINS_HOME")
@@ -70,18 +66,18 @@ func PushImage(pushInfo *ImagePushInfo, populateCache func(), deps []interface{}
 	if isJenkins || isCI {
 		log.Println("running in CI, calling container runtime login")
 		args := []string{"login", "-u=" + os.Getenv("QUAY_USER"), "-p=" + os.Getenv("QUAY_TOKEN"), "quay.io"}
-		if err := sh.Run(pushInfo.buildInfo.Runtime, args...); err != nil {
+		if err := sh.Run(pushInfo.BuildInfo.Runtime, args...); err != nil {
 			panic(fmt.Errorf("registry login: %w", err))
 		}
 	}
 
 	args := []string{"push"}
-	if pushInfo.buildInfo.Runtime == string(ContainerRuntimePodman) {
+	if pushInfo.BuildInfo.Runtime == string(ContainerRuntimePodman) {
 		args = append(args, "--digestfile="+pushInfo.DigestFile)
 	}
-	args = append(args, pushInfo.buildInfo.ImageTag)
+	args = append(args, pushInfo.BuildInfo.ImageTag)
 
-	if err := sh.Run(pushInfo.buildInfo.Runtime, args...); err != nil {
+	if err := sh.Run(pushInfo.BuildInfo.Runtime, args...); err != nil {
 		panic(fmt.Errorf("pushing image: %w", err))
 	}
 }
