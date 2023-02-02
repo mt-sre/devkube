@@ -18,8 +18,10 @@ type ImageBuildInfo struct {
 }
 
 type ImagePushInfo struct {
+	ImageTag   string
+	CacheDir   string
+	Runtime    string
 	DigestFile string
-	BuildInfo  *ImageBuildInfo
 }
 
 func execError(command []string, err error) error {
@@ -71,27 +73,27 @@ func quayLogin(runtime, cacheDir string) error {
 	return nil
 }
 
-// PushImage builds and pushes only the given container image to the default registry.
-func PushImage(pushInfo *ImagePushInfo, deps []interface{}) error {
-	mg.SerialDeps(mg.F(BuildImage, pushInfo.BuildInfo, deps))
+// PushImage pushes only the given container image to the default registry.
+func PushImage(pushInfo *ImagePushInfo, buildImageDep mg.Fn) error {
+	mg.SerialDeps(buildImageDep)
 
 	// Login to container registry when running on AppSRE Jenkins.
 	_, isJenkins := os.LookupEnv("JENKINS_HOME")
 	_, isCI := os.LookupEnv("CI")
 	if isJenkins || isCI {
 		log.Println("running in CI, calling container runtime login")
-		if err := quayLogin(pushInfo.BuildInfo.Runtime, pushInfo.BuildInfo.CacheDir); err != nil {
+		if err := quayLogin(pushInfo.Runtime, pushInfo.CacheDir); err != nil {
 			return err
 		}
 	}
 
-	args := []string{pushInfo.BuildInfo.Runtime, "push"}
-	if pushInfo.BuildInfo.Runtime == string(ContainerRuntimePodman) {
+	args := []string{pushInfo.Runtime, "push"}
+	if pushInfo.Runtime == string(ContainerRuntimePodman) {
 		args = append(args, "--digestfile="+pushInfo.DigestFile)
 	}
-	args = append(args, pushInfo.BuildInfo.ImageTag)
+	args = append(args, pushInfo.ImageTag)
 
-	pushCmd := newExecCmd(args, pushInfo.BuildInfo.CacheDir)
+	pushCmd := newExecCmd(args, pushInfo.CacheDir)
 	if err := pushCmd.Run(); err != nil {
 		return execError(args, err)
 	}
