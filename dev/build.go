@@ -88,7 +88,7 @@ func PushImage(pushInfo *ImagePushInfo, buildImageDep mg.Fn) error {
 	}
 
 	args := []string{pushInfo.Runtime, "push"}
-	if pushInfo.Runtime == string(ContainerRuntimePodman) {
+	if pushInfo.Runtime == string(ContainerRuntimePodman) && pushInfo.DigestFile != "" {
 		args = append(args, "--digestfile="+pushInfo.DigestFile)
 	}
 	args = append(args, pushInfo.ImageTag)
