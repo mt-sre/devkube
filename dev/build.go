@@ -24,12 +24,15 @@ type ImagePushInfo struct {
 	DigestFile string
 }
 
+// execCommand is replaced with helper function when testing
+var execCommand = exec.Command
+
 func execError(command []string, err error) error {
 	return fmt.Errorf("running command '%s': %w", strings.Join(command, " "), err)
 }
 
 func newExecCmd(args []string, cacheDir string) *exec.Cmd {
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := execCommand(args[0], args[1:]...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Dir = cacheDir
