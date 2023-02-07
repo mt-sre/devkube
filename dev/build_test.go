@@ -1,7 +1,6 @@
 package dev
 
 import (
-	"fmt"
 	"github.com/magefile/mage/mg"
 	"github.com/stretchr/testify/assert"
 	"os"
@@ -147,7 +146,6 @@ func TestPushImage_HelperProcess(t *testing.T) {
 	case "push":
 		assert.Equal(t, tc.pushCmd, command)
 	case "login":
-		fmt.Println(command)
 		assert.Equal(t, tc.loginCmd, command)
 	}
 	os.Exit(0)
