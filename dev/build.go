@@ -17,6 +17,14 @@ type ImageBuildInfo struct {
 	Runtime       string
 }
 
+type PackageBuildInfo struct {
+	ImageTag   string
+	CacheDir   string
+	SourcePath string // source directory
+	OutputPath string // destination: .tar file path
+	Runtime    string
+}
+
 type ImagePushInfo struct {
 	ImageTag   string
 	CacheDir   string
@@ -62,6 +70,30 @@ func BuildImage(buildInfo *ImageBuildInfo, deps []interface{}) error {
 		buildCmd := newExecCmd(command, buildInfo.CacheDir)
 		if err := buildCmd.Run(); err != nil {
 			return execError(command, err)
+		}
+	}
+	return nil
+}
+
+// BuildPackage builds a package image using the package operator CLI,
+// requires `kubectl package` command to be available on the system
+func BuildPackage(buildInfo *PackageBuildInfo, deps []interface{}) error {
+	if len(deps) > 0 {
+		mg.SerialDeps(deps...)
+	}
+
+	buildArgs := []string{
+		"kubectl", "package", "build", "--tag", buildInfo.ImageTag,
+		"--output", buildInfo.OutputPath, buildInfo.SourcePath,
+	}
+	importArgs := []string{
+		buildInfo.Runtime, "import", buildInfo.OutputPath, buildInfo.ImageTag,
+	}
+
+	for _, args := range [][]string{buildArgs, importArgs} {
+		command := newExecCmd(args, buildInfo.CacheDir)
+		if err := command.Run(); err != nil {
+			return execError(args, err)
 		}
 	}
 	return nil

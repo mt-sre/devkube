@@ -8,11 +8,18 @@ import (
 	"testing"
 )
 
-type buildTestCase struct {
+type buildImgTestCase struct {
 	name      string
 	buildInfo ImageBuildInfo
 	buildCmd  []string
 	saveCmd   []string
+}
+
+type buildPkgTestCase struct {
+	name      string
+	buildInfo PackageBuildInfo
+	buildCmd  []string
+	importCmd []string
 }
 
 type pushTestCase struct {
@@ -23,7 +30,7 @@ type pushTestCase struct {
 }
 
 var (
-	defaultBuildCase = buildTestCase{
+	defaultBuildImgCase = buildImgTestCase{
 		name: "default",
 		buildInfo: ImageBuildInfo{
 			ImageTag:      "test_ImageTag",
@@ -36,7 +43,7 @@ var (
 		saveCmd:  []string{"test_Runtime", "image", "save", "-o", ".tar", "test_ImageTag"},
 	}
 
-	noConFileBuildCase = buildTestCase{
+	noConFileBuildImgCase = buildImgTestCase{
 		name: "no-container-file",
 		buildInfo: ImageBuildInfo{
 			ImageTag:      "test_ImageTag",
@@ -49,9 +56,17 @@ var (
 		saveCmd:  []string{"test_Runtime", "image", "save", "-o", ".tar", "test_ImageTag"},
 	}
 
-	buildTestCases = map[string]*buildTestCase{
-		"default":           &defaultBuildCase,
-		"no-container-file": &noConFileBuildCase,
+	defaultBuildPkgCase = buildPkgTestCase{
+		name: "default",
+		buildInfo: PackageBuildInfo{
+			ImageTag:   "test_ImageTag",
+			CacheDir:   "",
+			SourcePath: "test_SourcePath",
+			OutputPath: "test_OutputPath",
+			Runtime:    "test_Runtime",
+		},
+		buildCmd:  []string{"kubectl", "package", "build", "--tag", "test_ImageTag", "--output", "test_OutputPath", "test_SourcePath"},
+		importCmd: []string{"test_Runtime", "import", "test_OutputPath", "test_ImageTag"},
 	}
 
 	defaultPushCase = pushTestCase{
@@ -78,6 +93,15 @@ var (
 		loginCmd: []string{string(ContainerRuntimePodman), "login", "-u=" + os.Getenv("QUAY_USER"), "-p=" + os.Getenv("QUAY_TOKEN"), "quay.io"},
 	}
 
+	buildImgTestCases = map[string]*buildImgTestCase{
+		"default":           &defaultBuildImgCase,
+		"no-container-file": &noConFileBuildImgCase,
+	}
+
+	buildPkgTestCases = map[string]*buildPkgTestCase{
+		"default": &defaultBuildPkgCase,
+	}
+
 	pushTestCases = map[string]*pushTestCase{
 		"default": &defaultPushCase,
 		"podman":  &podmanPushCase,
@@ -91,8 +115,9 @@ var (
 )
 
 const (
-	buildHelper = "TestBuildImage_HelperProcess"
-	pushHelper  = "TestPushImage_HelperProcess"
+	buildImgHelper = "TestBuildImage_HelperProcess"
+	buildPkgHelper = "TestBuildPackage_HelperProcess"
+	pushHelper     = "TestPushImage_HelperProcess"
 )
 
 func mockExecCommand(command string, args ...string) *exec.Cmd {
@@ -110,7 +135,7 @@ func TestBuildImage_HelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	tc := buildTestCases[os.Getenv("GO_TEST_CASE_NAME")]
+	tc := buildImgTestCases[os.Getenv("GO_TEST_CASE_NAME")]
 	command := os.Args[3:]
 	switch command[1] {
 	case "build":
@@ -126,12 +151,42 @@ func TestBuildImage_HelperProcess(t *testing.T) {
 func TestBuildImage(t *testing.T) {
 	execCommand = mockExecCommand
 	defer func() { execCommand = exec.Command }()
-	helperProcess = buildHelper
+	helperProcess = buildImgHelper
 
-	for _, tc := range buildTestCases {
+	for _, tc := range buildImgTestCases {
 		currentTestCase = tc.name
 		t.Run(tc.name, func(t *testing.T) {
 			assert.NoError(t, BuildImage(&tc.buildInfo, []interface{}{}))
+		})
+	}
+}
+
+func TestBuildPackage_HelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	tc := buildPkgTestCases[os.Getenv("GO_TEST_CASE_NAME")]
+	command := os.Args[3:]
+	switch command[1] {
+	case "package":
+		assert.Equal(t, tc.buildCmd, command)
+	case "import":
+		assert.Equal(t, tc.importCmd, command)
+	default:
+		t.Errorf("invalid command")
+	}
+	os.Exit(0)
+}
+
+func TestBuildPackage(t *testing.T) {
+	execCommand = mockExecCommand
+	defer func() { execCommand = exec.Command }()
+	helperProcess = buildPkgHelper
+
+	for _, tc := range buildPkgTestCases {
+		currentTestCase = tc.name
+		t.Run(tc.name, func(t *testing.T) {
+			assert.NoError(t, BuildPackage(&tc.buildInfo, []interface{}{}))
 		})
 	}
 }
