@@ -67,8 +67,8 @@ var (
 			Runtime:    "test_Runtime",
 		},
 		commands: [][]string{
-			{"kubectl", "package", "build", "--tag", "test_ImageTag", "--output", "test_OutputPath", "test_SourcePath"},
-			{"test_Runtime", "import", "test_OutputPath", "test_ImageTag"},
+			{"kubectl-package", "build", "--tag", "test_ImageTag", "--output", "test_OutputPath", "test_SourcePath"},
+			{"test_Runtime", "load", "--input", "test_OutputPath"},
 		},
 	}
 
@@ -165,7 +165,9 @@ func TestBuildImage_HelperProcess(t *testing.T) {
 	}
 	tc := buildImgTestCases[os.Getenv("GO_TEST_CASE_NAME")]
 	command := os.Args[3:]
-	assert.True(t, matchAtLeastOne(command, tc.commands))
+	if !matchAtLeastOne(command, tc.commands) {
+		t.Fatalf("invalid command: %v", command)
+	}
 	os.Exit(0)
 }
 
@@ -188,7 +190,9 @@ func TestBuildPackage_HelperProcess(t *testing.T) {
 	}
 	tc := buildPkgTestCases[os.Getenv("GO_TEST_CASE_NAME")]
 	command := os.Args[3:]
-	assert.True(t, matchAtLeastOne(command, tc.commands))
+	if !matchAtLeastOne(command, tc.commands) {
+		t.Fatalf("invalid command: %v", command)
+	}
 	os.Exit(0)
 }
 
@@ -211,7 +215,9 @@ func TestPushImage_HelperProcess(t *testing.T) {
 	}
 	tc := pushTestCases[os.Getenv("GO_TEST_CASE_NAME")]
 	command := os.Args[3:]
-	assert.True(t, matchAtLeastOne(command, tc.commands))
+	if !matchAtLeastOne(command, tc.commands) {
+		t.Fatalf("invalid command: %v", command)
+	}
 	os.Exit(0)
 }
 
