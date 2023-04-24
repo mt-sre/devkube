@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 )
 
 // Test Stub to use as workload stand-in in integration tests.
@@ -13,7 +12,7 @@ func main() {
 
 	// block forever
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, os.Interrupt, os.Kill)
 
 	<-sigs
 	fmt.Fprintln(os.Stdout, "shutdown...")
