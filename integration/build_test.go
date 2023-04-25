@@ -65,7 +65,7 @@ func populateCache(cache string, files ...string) error {
 }
 
 func detectImage(tagPattern string) (bool, error) {
-	out, err := exec.Command(string(runtime), "images").Output()
+	out, err := exec.Command(string(runtime), "images").Output() //nolint:gosec
 	if err != nil {
 		return false, err
 	}

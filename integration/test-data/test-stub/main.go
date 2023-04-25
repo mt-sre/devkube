@@ -12,7 +12,7 @@ func main() {
 
 	// block forever
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, os.Kill)
+	signal.Notify(sigs, os.Interrupt)
 
 	<-sigs
 	fmt.Fprintln(os.Stdout, "shutdown...")
