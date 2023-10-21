@@ -1,12 +1,13 @@
 exclude: |
   (?x)(
     (^vendor/)|
-    (.deepcopy.go$)|
-    (mage_output_file.go$)
+    (^.vscode/)|
+    (mage_output_file.go)|
+    (.deepcopy.go$)
   )
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v2.4.0
+  rev: v4.5.0
   hooks:
   - id: check-added-large-files
   - id: check-case-conflict
@@ -15,38 +16,23 @@ repos:
   - id: check-symlinks
   - id: detect-private-key
   - id: end-of-file-fixer
+    exclude: ".test-fixtures\/.*"
   - id: pretty-format-json
     args:
     - --autofix
   - id: trailing-whitespace
 
-- repo: https://github.com/dnephin/pre-commit-golang
-  rev: v0.3.5
-  hooks:
-  - id: go-fmt
-
 - repo: local
   hooks:
-  - id: goimports
-    name: goimports
-    entry: hack/ensure-and-run-goimports.sh
-    language: script
-    types: [go]
-    require_serial: true # mage does not like multiple parallel compiles
-
-  - id: golangci-lint
-    name: golangci-lint
-    entry: hack/ensure-and-run-golangci-lint.sh
-    language: script
-    pass_filenames: false
-    types: [go]
-    require_serial: true # mage does not like multiple parallel compiles
-
-  - id: go-mod-tidy
-    name: go-mod-tidy
-    entry: ./mage tidy
-    language: script
+  - id: lint
+    name: lint
+    entry: ./mage test:fixlint
+    language: system
     exclude: ".*"
-    pass_filenames: false
     always_run: true
-    require_serial: true # mage does not like multiple parallel compiles
+  - id: code-gen
+    name: code-gen
+    entry: ./mage generate:all
+    language: system
+    exclude: ".*"
+    always_run: true
