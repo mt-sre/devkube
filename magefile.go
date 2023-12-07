@@ -12,7 +12,7 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
-const golangciLintVersion = "1.55.0"
+const golangciLintVersion = "v1.55.0"
 
 var (
 	cacheDir = filepath.Join(".", ".cache")

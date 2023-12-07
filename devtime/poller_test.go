@@ -1,4 +1,4 @@
-package devclock_test
+package devtime_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mt-sre/devkube/devclock"
+	"github.com/mt-sre/devkube/devtime"
 
 	"github.com/stretchr/testify/require"
 )
@@ -14,14 +14,14 @@ import (
 func TestPollerNothingSet(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time)
 	close(tc)
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 1*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock}
+	poller := devtime.Poller{Clock: clock}
 	called := 0
 	ctx := context.Background()
 	check := func(c context.Context) (bool, error) {
@@ -40,14 +40,14 @@ func TestPollerNothingSet(t *testing.T) {
 func TestPollerIntervalSet(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time)
 	close(tc)
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 7*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock, PollInterval: 7 * time.Second}
+	poller := devtime.Poller{Clock: clock, PollInterval: 7 * time.Second}
 	called := 0
 	ctx := context.Background()
 	check := func(c context.Context) (bool, error) {
@@ -66,14 +66,14 @@ func TestPollerIntervalSet(t *testing.T) {
 func TestPollerCheckErrors(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time)
 	close(tc)
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 1*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock}
+	poller := devtime.Poller{Clock: clock}
 	called := 0
 	ctx := context.Background()
 	checkErr := errors.New("ogno")
@@ -93,14 +93,14 @@ func TestPollerCheckErrors(t *testing.T) {
 func TestPollerMultipoll(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time)
 	close(tc)
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 1*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock}
+	poller := devtime.Poller{Clock: clock}
 	called := 0
 	ctx := context.Background()
 	check := func(c context.Context) (bool, error) {
@@ -122,14 +122,14 @@ func TestPollerMultipoll(t *testing.T) {
 func TestPollerCanceledContext(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time, 1)
 	tc <- time.Time{}
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 1*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock}
+	poller := devtime.Poller{Clock: clock}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	called := 0
@@ -150,14 +150,14 @@ func TestPollerCanceledContext(t *testing.T) {
 func TestPollerMaxWait(t *testing.T) {
 	t.Parallel()
 
-	clock := &devclock.MockClock{}
-	ticker := &devclock.MockTicker{}
+	clock := &devtime.MockClock{}
+	ticker := &devtime.MockTicker{}
 	tc := make(chan time.Time, 1)
 	tc <- time.Time{}
 	ticker.On("C").Once().Return(tc)
 	ticker.On("Stop").Once()
 	clock.On("NewTicker", 1*time.Second).Once().Return(ticker)
-	poller := devclock.Poller{Clock: clock, MaxWaitDuration: 6 * time.Second}
+	poller := devtime.Poller{Clock: clock, MaxWaitDuration: 6 * time.Second}
 
 	ctx := context.Background()
 	called := 0

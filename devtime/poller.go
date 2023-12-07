@@ -1,4 +1,4 @@
-package devclock
+package devtime
 
 import (
 	"context"

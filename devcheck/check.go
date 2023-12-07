@@ -1,4 +1,3 @@
-// Package devcheck
 package devcheck
 
 import (

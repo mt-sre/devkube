@@ -1,4 +1,5 @@
-package devclock
+// Package devtime contains helpers related to time.
+package devtime
 
 import (
 	"time"

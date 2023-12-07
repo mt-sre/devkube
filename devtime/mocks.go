@@ -1,5 +1,5 @@
 //nolint:revive
-package devclock
+package devtime
 
 import (
 	"time"

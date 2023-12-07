@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mt-sre/devkube/devcheck"
-	"github.com/mt-sre/devkube/devclock"
+	"github.com/mt-sre/devkube/devtime"
 
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +37,7 @@ func DefaultReadynessCheckSetIfEmpty(cli client.Client, c ReadynessChecks, check
 type Cluster struct {
 	Cli             client.Client
 	Checker         devcheck.Checker
-	Poller          devclock.Poller
+	Poller          devtime.Poller
 	ReadynessChecks map[string][]devcheck.ObjCheck
 }
 
