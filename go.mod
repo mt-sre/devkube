@@ -5,7 +5,7 @@ go 1.21.4
 require (
 	github.com/go-logr/logr v1.4.1
 	github.com/magefile/mage v1.15.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	k8s.io/api v0.29.2
 	k8s.io/apiextensions-apiserver v0.29.1
 	k8s.io/apimachinery v0.29.2
