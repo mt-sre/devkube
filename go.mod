@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.2
 
 require (
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/magefile/mage v1.15.0
 	github.com/stretchr/testify v1.9.0
 	k8s.io/api v0.30.0
