@@ -8,10 +8,10 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/magefile/mage v1.15.0
 	github.com/stretchr/testify v1.9.0
-	k8s.io/api v0.30.3
+	k8s.io/api v0.31.0
 	k8s.io/apiextensions-apiserver v0.30.3
 	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.30.3
+	k8s.io/client-go v0.31.0
 	sigs.k8s.io/controller-runtime v0.18.4
 	sigs.k8s.io/kind v0.24.0
 	sigs.k8s.io/yaml v1.4.0
@@ -30,6 +30,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/safetext v0.0.0-20240104143208-7a7d9b3d812f // indirect
 	github.com/google/uuid v1.6.0 // indirect
